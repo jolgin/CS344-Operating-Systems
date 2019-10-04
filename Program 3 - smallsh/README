@@ -1,0 +1,22 @@
+In this assignment you will write your own shell in C, similar to bash. No other languages, including C++, are allowed, though you may use any version of C you like, such as C99. The shell will run command line instructions and return the results similar to other shells you have used, but without many of their fancier features.
+
+In this assignment you will write your own shell, called smallsh.  This will work like the bash shell you are used to using, prompting for a command line and running commands, but it will not have many of the special features of the bash shell.
+
+Your shell will allow for the redirection of standard input and standard output and it will support both foreground and background processes (controllable by the command line and by receiving signals).
+
+Your shell will support three built in commands: exit, cd, and status. It will also support comments, which are lines beginning with the # character.
+
+
+
+
+To compile my program, run the following command: 	gcc -o smallsh smallsh.c
+To run my program, run the following command:		./smallsh
+
+
+My program should run without issue when running the "p3testscript > mytestresults 2>&1" command.
+It usually takes about 30 seconds for the script to resolve using my program. No flags or any other
+modifications need to be made to the compilation command. 
+
+NOTE*** Sometimes the next prompt takes a second (literally a second or less) to show up. This is because I used
+	the usleep() function where I check for any terminated background processes. The program isn't hung, it's 
+	just waiting a moment to check for any background processes that recently terminated.

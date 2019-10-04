@@ -1,0 +1,661 @@
+#!/bin/bash
+# Name: John Olgin
+# Description: The following program will read matrices from files or stdin and perform certain matrix operations.
+# Date: 6/27/19
+
+# **** NOTE: This grading script seems to run for about 1 minute 30 seconds (give or take 10 seconds). It doesn't 
+#	seem to come close to the time limit when running on os1.
+
+
+
+
+
+# TEMPORARY FILES
+tempCol="tempcolfile$$"
+tempRow="temprowfile$$"
+tempMean="meanFiles$$"
+
+
+# Function Name: dims()
+# Description: This function will will take a single file with a matrix inside it and output the dimensions (rows x columns) for the user to see
+# Preconditions: A valid file with a valid matrix must either be piped in or provided via stdin to the function
+# Postconditions: The file itself will not be changed, but the dimensions will be echoed out to the console for the user to see
+
+dims()
+{
+	# initiate rows and column variables
+	rows=0
+  	cols=0
+
+	# catch interrupt, hangup, and terminate signals to remove the temporary files if the program is terminated unexpectedly
+	# CREDIT: this is heavily influenced by the code given in the Program 1 description page
+	trap "echo 'SIGINT, SIGHUP or SIGTERM received: Deleting temp file then exiting!'; exit 1" INT HUP TERM
+
+	# check if their are an appropriate amount of arguments provided
+	if [ "$#" -gt 1 ]
+	then
+		echo "Error: Invalid number of arguments" >&2
+		exit 1
+	fi
+
+	
+	# If the number of arguments are correct
+	# Check whether the file is being piped in or is provided via stdin
+	# Also check the file is readable
+	if [ "$#" -ne 1 ]
+	then
+		if [ -r /dev/stdin ]
+		then
+			file=/dev/stdin
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	else
+		if [ -r $1 ]
+		then
+			file=$1
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	fi
+
+
+	# Read in each line and increment the rows variable
+	while read line
+	do
+		rows=$(expr $rows + 1)
+		
+		# count the number of elements in only the first row
+		# This will set the cols "columns" variable
+		if test $cols -eq 0
+		then
+			for int in $line
+			do
+				cols=$(expr $cols + 1)
+			done
+		fi			
+	done < "$file"
+
+
+	# output the rows and cols variables	
+  	echo $rows $cols 
+
+
+  	exit 0
+}
+
+
+
+
+
+# TEMPORARY FILE
+transposeTmp="transposeTemp$$"
+
+
+# Function Name: transpose()
+# Description: This function will take a matrix and change the columns to rows, the first column will become the
+#		first row, second column will become the second row, etc. Therefore, row and column dimensions will switch. 
+# Preconditions: A valid file with a valid matrix must either be piped in or provided via stdin to the function.
+# Postconditions: The file itself will not be changed, but a transposition of the original matrix will be echoed out
+#		for the user to see.
+
+transpose()
+{
+	# create row and column variables
+	rows=0
+  	cols=0
+
+	# catch interrupt, hangup, and terminate signals to remove the temporary files if the program is terminated unexpectedly
+	# CREDIT: this is heavily influenced by the code given in the Program 1 description page
+	trap "rm -f $transposeTmp; echo 'SIGINT, SIGHUP or SIGTERM received: Deleting temp file then exiting!'; exit 1" INT HUP TERM
+
+	# check if their are an appropriate amount of arguments provided
+	if [ "$#" -gt 1 ]
+	then
+		echo "Error: Invalid number of arguments" >&2
+		exit 1
+	fi
+
+
+	# THIS SECTION IS FILE DISCOVERY AND VALIDATION
+	# If the number of arguments are correct
+	# Check whether the file is being piped in or is provided via stdin
+	# Also check the file is readable
+	if [ "$#" -ne 1 ]
+	then
+		if [ -r /dev/stdin ]
+		then
+			file=/dev/stdin
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	else
+		if [ -r $1 ]
+		then
+			file=$1
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	fi
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS
+	# Read in each line and increment the rows variable
+	while read line
+	do
+		rows=$(expr $rows + 1)
+
+		
+		# Count the number of elements in only the first row
+		# Since these are valid matrices, the program only needs to 
+		# count the number of integers in one row
+		# This will set the cols "columns" variable
+		if test $cols -eq 0
+		then
+			for int in $line
+			do
+				cols=$(expr $cols + 1)
+			done
+		fi			
+	done < "$file"
+
+
+
+
+	# THIS SECTION HANDLES TRANSPOSITION
+	index=1
+	index2=0
+
+	# iterate through the columns
+	until [ $index -gt $cols ]
+	do
+		
+		# cut a specific column from file and put into a temp file
+		# this allows the program to manipulate the matrix one column at a time
+		cut -d $'\t' -f $index $file > $transposeTmp
+		index2=0
+
+
+		# read the integer from each line
+		while read int
+		do
+
+			# echo out integers in the column onto a single row
+			echo -n $int
+
+
+			# keep track of integers echoed out so it will go to the
+			# next line correctly
+			index2=$(expr $index2 + 1)
+
+
+			# echo out tabs and newline depending on index
+			# this part ensures the integers are put in the correct matrix format
+			if [ $index2 -eq $rows ]
+			then
+				echo
+			else
+				echo -n -e "\t"
+			fi
+		done < "$transposeTmp"
+
+
+		# go to next column
+		index=$(expr $index + 1)
+	done
+
+
+
+	# cleanup
+	rm -f $transposeTmp
+
+	exit 0
+}
+
+
+
+
+
+# Function Name: mean()
+# Description: This function will calculate the mean of all numbers in each column. It will then output a mean vector. 
+#	 	Therefore, the mean for each column will be output with tabs between each mean.
+# Preconditions: A valid file with a valid matrix must either be piped in or provided via stdin to the function.
+# Postconditions: The file itself will not be changed, but a mean vector of the original matrix will be echoed out
+#		for the user to see.
+mean()
+{
+	# initiate row and column variables
+	rows=0
+  	cols=0
+
+	# catch interrupt, hangup, and terminate signals to remove the temporary files if the program is terminated unexpectedly
+	# CREDIT: this is heavily influenced by the code given in the Program 1 description page
+	trap "rm -f $tempCol; echo 'SIGINT, SIGHUP or SIGTERM received: Deleting temp file then exiting!'; exit 1" INT HUP TERM
+
+	# check if their are an appropriate amount of arguments provided
+	if [ "$#" -gt 1 ]
+	then
+		echo "Error: Invalid number of arguments" >&2
+		exit 1
+	fi
+
+
+	# THIS SECTION IS FILE DISCOVERY AND VALIDATION
+	# If the number of arguments are correct
+	# Check whether the file is being piped in or is provided via stdin
+	# Also check the file is readable
+	if [ "$#" -ne 1 ]
+	then
+		if [ -r /dev/stdin ]
+		then
+			file=/dev/stdin
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	else
+		if [ -r $1 ]
+		then
+			file=$1
+		else
+			echo "Error: file unreadable" >&2
+			exit 1
+		fi
+	fi
+
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS
+	# Read in each line and increment the rows variable
+	while read line
+	do
+		rows=$(expr $rows + 1)
+
+
+		# count the number of elements in only the first row
+		# This will set the cols "columns" variable
+		if test $cols -eq 0
+		then
+			for int in $line
+			do
+				cols=$(expr $cols + 1)
+			done
+		fi			
+	done < "$file"
+
+	
+
+
+	# THIS SECTION CALCULATES AND OUTPUTS THE MEAN OF EACH COLUMN AS A MEAN VECTOR
+	index=1
+
+	# iterate through each column in the file
+	while [[ $index -le $cols ]] 
+	do
+		#reset variables
+		count=0
+		sum=0
+		
+		# cut each column and insert into temp file to isolate column
+		# this way the program can read two integers simultaneously from the two matrices
+		cut -f $index $file > $tempCol
+
+		# add each integer into the sum from temp file
+		while read num
+		do
+			sum=`expr $sum + $num`
+			count=`expr $count + 1`
+		done < "$tempCol"
+
+		# calculate the mean
+		mean=$(((sum + (count/2)*((sum>0)*2-1)) / count))
+
+		# output the mean and insert tabs/newlines as appropriate
+		# if index equals the number of columns, add an ending newline
+		# this ensures the integers are output in correct matrix format
+		echo -n "$mean"
+		if [ $index -eq $cols ]
+		then
+			echo
+		else
+			echo -n -e "\t"
+		fi
+		
+		# increment index
+		index=$((index+1))
+	done
+
+	# cleanup
+	rm -f $tempCol	
+
+	exit 0
+}
+
+
+
+
+
+
+# TEMPORARY FILES
+colTmp1="addColTemp1$$"
+colTmp2="addColTemp2$$"
+newTemp1="noLinesTemp1$$"
+newTemp2="noLinesTemp2$$"
+
+
+# Function Name: add()
+# Description: This function will add two matrices together. It will output another matrix with same dimensions of
+#	 	the two original matrices. The new matrix will 
+# Preconditions: Two valid files with valid matrices must be piped in to be read by the function. The two matrices must
+#		matching dimensions in order for this function to work correctly.
+# Postconditions: The two original files won't be altered, but a new matrix representing the sum of each respective
+#		integer from the two original files will be output for the user to see. 
+
+add()
+{
+	# catch interrupt, hangup, and terminate signals to remove the temporary files if the program is terminated unexpectedly
+	# CREDIT: this is heavily influenced by the code given in the Program 1 description page
+	trap "rm -f $colTmp1 $colTmp2 $newTemp1 $newTemp2; echo 'SIGINT, SIGHUP or SIGTERM received: Deleting temp file then exiting!'; exit 1" INT HUP TERM
+
+
+
+
+	# THIS SECTION VALIDATES THE NUMBER OF ARGUMENTS AND CHECKS FILE READABILITY
+	# check if their are an appropriate amount of arguments provided
+	if [ "$#" -ne 2 ]
+	then
+		echo "Error: invalid amount of arguments" >&2
+		exit 1
+	fi
+
+	# check file readability for both files
+	if [ ! -r $1 ] || [ ! -r $2 ]
+	then
+		echo "Error: One or more files are unreadable" >&2
+		exit 1
+	fi
+	
+
+	# create row and column variables for both matrices
+	r1=0
+	c1=0
+	r2=0
+	c2=0
+
+	# assign the files to be read in
+	file1=$1
+	file2=$2
+
+
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS FOR FILE 1
+	# Read in each line and increment the rows variable
+	while read line
+	do
+		r1=$(expr $r1 + 1)
+
+		# count the number of elements in only the first row
+		# This will set the cols "columns" variable
+		if test $c1 -eq 0
+		then
+			for int in $line
+			do
+				c1=$(expr $c1 + 1)
+			done
+		fi			
+	done < "$file1"
+
+
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS FOR FILE 2
+	# Read in each line and increment the rows variable
+	while read line2
+	do
+		r2=$(expr $r2 + 1)
+
+		# count the number of elements in only the first row
+		# This will set the cols "columns" variable
+		if test $c2 -eq 0
+		then
+			for int in $line2
+			do
+				c2=$(expr $c2 + 1)
+			done
+		fi
+	done < "$file2"
+
+
+	# check that the dimensions match and can be added
+	if [ $r1 -ne $r2 ] || [ $c1 -ne $c2 ]
+	then
+		echo "Error: dimensions don't match" >&2
+		exit 1
+	fi
+
+
+	
+
+
+	# THIS SECTION WILL ADD THE TWO MATRICES AND OUTPUT THE FINAL MATRIX
+	index1=1
+	sum=0
+
+	# put each number from both files on its own line
+	# this will allow the program to read each line (each with one integer) simultaneously from
+	# both matrices
+	# CREDIT: changing tabs to newlines was heavily influenced by the URL below
+	# https://unix.stackexchange.com/questions/105569/bash-replace-space-with-new-line
+	tr "\t" "\n" < $file1 > $newTemp1
+	tr "\t" "\n" < $file2 > $newTemp2
+
+
+	# read in each integer
+	while read int1 <&3 && read int2 <&4
+	do
+		
+		# add integer from each file together and echo out sum
+		sum=$(expr $int1 + $int2)
+		echo -n $sum
+
+
+		# echo tabs/newlines where appropriate
+		# if index equals the number of columns, start a new line and reset index
+		# this outputs the sums in correct matrix format
+		if [ $index1 -eq $c1 ]
+		then
+			echo
+			index1=0
+		else
+			echo -n -e "\t"
+		fi
+
+		index1=$(expr $index1 + 1)
+	done 3<$newTemp1 4<$newTemp2
+
+
+
+	# cleanup
+	rm -f $colTmp1 $colTmp2 $newTemp1 $newTemp2	
+
+	exit 0
+}
+
+
+
+
+
+# TEMPORARY FILES
+multTemp1="anotherTemp1$$"
+multTemp2="anotherTemp2$$"
+multTemp3="anotherTemp3$$"
+
+
+# Function Name: multiply()
+# Description: This function will multiply two matrices together and output a new matrix representing the dot products.
+# Preconditions: Two valid files with valid matrices must be piped in to be read by the function. The two matrices must
+#		have compatible dimensions (MxN and NxP) in order for this function to work correctly.
+# Postconditions: The two original files won't be altered, but a new matrix representing the dot products of the rows in 
+#		matrix 1 by the columns in matrix 2 will be output for the user to see.
+multiply()
+{
+	# catch interrupt, hangup, and terminate signals to remove the temporary files if the program is terminated unexpectedly
+	# CREDIT: this is heavily influenced by the code given in the Program 1 description page
+	trap "rm -f $multTemp1 $multTemp2 $multTemp3; echo 'SIGINT, SIGHUP or SIGTERM received: Deleting temp file then exiting!'; exit 1" INT HUP TERM
+
+
+
+
+	# THIS SECTION VALIDATES THE NUMBER OF ARGUMENTS AND CHECKS FILE READABILITY
+	# check if their are an appropriate amount of arguments provided
+	if [ "$#" -ne 2 ]
+	then
+		echo "Error: invalid amount of arguments" >&2
+		exit 1
+	fi
+
+	# check file readability for both files
+	if [ ! -r $1 ] || [ ! -r $2 ]
+	then
+		echo "Error: One or more files are unreadable" >&2
+		exit 1
+	fi
+
+	# initiate row and column variables for both matrices
+	r1=0
+	c1=0
+	r2=0
+	c2=0
+
+	# assign both files to variables
+	file1=$1
+	file2=$2
+
+
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS FOR FILE 1
+	# Read in each line to increment the rows variable
+	while read line
+	do
+		r1=$(expr $r1 + 1)
+
+		# count the number of elements in only the first row
+		# This will set the cols "columns" variable
+		if test $c1 -eq 0
+		then
+			for int in $line
+			do
+				c1=$(expr $c1 + 1)
+			done
+		fi			
+	done < "$file1"
+
+
+
+
+
+	# THIS SECTION GETS MATRIX DIMENSIONS FOR FILE 2
+	# Read in each line to increment the rows variable
+	while read line2
+	do
+		r2=$(expr $r2 + 1)
+
+		if test $c2 -eq 0
+		then
+			# count the number of elements in only the first row
+			# This will set the cols "columns" variable
+			for int in $line2
+			do
+				c2=$(expr $c2 + 1)
+			done
+		fi
+	done < "$file2"
+
+
+	# check that the matrices' dimensions are compatible for multiplication
+	# this ensures matrix 1's columns are equal to matrix 2's rows
+	if [ $c1 -ne $r2 ]
+	then
+		echo "Error: Dimensions are incompatible" >&2
+		exit 1
+	fi
+
+
+
+
+	
+	# THIS SECTION MULTIPLIES MATRIX 1 ROWS BY MATRIX 2 COLUMNS TO GET DOT PRODUCTS
+	while read line 
+	do
+		# reset the column index in matrix 2 when starting the next matrix 1 row
+		colIndex=1
+
+
+		# echo line into temp file, then put each integer on its own line in another file
+		# this will allow the program to read each line (each with one integer) simultaneously from
+		# both matrices
+		# CREDIT: the code to change spaces into newlines was influenced by the URL below
+		# https://unix.stackexchange.com/questions/105569/bash-replace-space-with-new-line
+		echo $line > $multTemp1
+		tr " " "\n" < $multTemp1 > $multTemp3
+
+
+		# iterate through matrix 2's columns for each of matrix 1's rows
+		until [ $colIndex -gt $c2 ]
+		do
+			# cut column from matrix 2 and place into temp file to isolate the column
+			cut -d $'\t' -f $colIndex $file2 > $multTemp2
+
+
+			# reset sum to prepare for the next dot product calculation
+			sum=0
+
+
+			# multiply the integers from each matrix and add to sum to get the dot 
+			# product for each row and column pair
+			while read int1 <&3 && read int2 <&4
+			do
+				product=`expr $int1 \* $int2`
+				sum=`expr $sum + $product`
+			done 3<$multTemp3 4<$multTemp2
+
+
+			# echo the dot product for the user to see
+			echo -n $sum
+
+
+			# echo tabs/newlines where appropriate
+			# if index equals the number of columns in matrix 2, start a new line
+			# this will format the matrix correctly for the user
+			if [ $colIndex -eq $c2 ] 
+			then	
+				echo
+			else
+				echo -n -e "\t"
+			fi
+			
+
+			# increment to the next column in matrix 2
+			colIndex=`expr $colIndex + 1`	
+		done	
+	done < "$file1"
+
+	# cleanup
+	rm -f $multTemp1 $multTemp2 $multTemp3
+
+	exit 0
+}
+
+
+$@
